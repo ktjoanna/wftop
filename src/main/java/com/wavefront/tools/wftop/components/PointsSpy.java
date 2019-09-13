@@ -407,6 +407,20 @@ public class PointsSpy {
     }
   }
 
+  public Dimension getDimension(String dimension) {
+    switch (dimension) {
+      case "HOST" :
+        return Dimension.HOST;
+      case "POINT_TAG":
+        return Dimension.POINT_TAG;
+      case "POINT_TAG_KEY":
+        return Dimension.POINT_TAG_KEY;
+      case "METRIC":
+      default:
+        return Dimension.METRIC;
+    }
+  }
+
   /**
    * @param line Each line is Type, Id name, Id number.
    */
@@ -461,6 +475,10 @@ public class PointsSpy {
         this.typePrefix = "METRIC";
         break;
     }
+  }
+
+  public void setSpyOnPoint(boolean spyOnPoint) {
+    this.spyOnPoint = spyOnPoint;
   }
 
   public interface Listener {

@@ -9,6 +9,8 @@ import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
 import com.wavefront.tools.wftop.components.Node;
 
+import org.apache.commons.csv.CSVPrinter;
+
 import javax.annotation.Nullable;
 import java.util.*;
 
@@ -23,18 +25,24 @@ public abstract class NamespacePanel extends Panel {
   protected final Label connectivityStatus = new Label("");
   protected final Label samplingRate = new Label("");
   protected final Label path = new Label("> ");
+  protected final Label stopwatchTime = new Label("");
+  protected final Panel header, footer;
 
   protected Listener listener = null;
   protected Table<String> table;
   protected Map<String, Node> labelToNodeMap = new HashMap<>();
   protected int sortIndex = 1;
   protected boolean reverseSort = true;
+  protected Button configBtn, stopStartBtn;
+  protected String exportFile = null;
+  protected String rootPath = null;
+  protected CSVPrinter csvPrinter;
 
   public NamespacePanel(SpyConfigurationPanel panel, MultiWindowTextGUI gui) {
     this.setLayoutManager(new BorderLayout());
 
     // header.
-    Panel header = new Panel(new BorderLayout());
+    header = new Panel(new BorderLayout());
     header.addComponent(globalPPS.withBorder(Borders.singleLine()).
         setLayoutData(BorderLayout.Location.CENTER));
     header.addComponent(connectivityStatus.withBorder(Borders.singleLine()).
@@ -79,8 +87,8 @@ public abstract class NamespacePanel extends Panel {
     });
     this.addComponent(table.setLayoutData(BorderLayout.Location.CENTER).withBorder(Borders.singleLine()));
 
-    Panel footer = new Panel(new LinearLayout(Direction.HORIZONTAL));
-    Button configBtn = new Button("Config");
+    footer = new Panel(new LinearLayout(Direction.HORIZONTAL));
+    configBtn = new Button("Config");
     configBtn.addListener(button -> {
       gui.addWindowAndWait(panel);
     });
@@ -106,7 +114,7 @@ public abstract class NamespacePanel extends Panel {
       }
     });
     footer.addComponent(reverseSortBtn);
-    Button stopStartBtn = new Button("Stop/Start");
+    stopStartBtn = new Button("Stop/Start");
     stopStartBtn.addListener(button -> {
       if (listener != null) {
         listener.onStopStart();
@@ -133,20 +141,27 @@ public abstract class NamespacePanel extends Panel {
   /**
    * Add first row (to go up a folder).
    */
-  protected abstract void addFirstRow(Node root, double factor, Collection<Node> nodes, Snapshot snapshot);
+  protected abstract void addFirstRow(Node root, double factor, Collection<Node> nodes,
+                                      Snapshot snapshot, boolean takeSnapshot);
 
   /**
    * Now sort and add the nodes for this folder.
    */
-  protected abstract void addNodes(Node root, double factor, Collection<Node> nodes, Snapshot snapshot, String selectedLabel);
+  protected abstract void addNodes(Node root, double factor, Collection<Node> nodes,
+                                   Snapshot snapshot, String selectedLabel, boolean takeSnapshot);
 
   /**
-   * Display global Points per Second (spy on Points) or Creations per Second (spy on Id Creation)
+   * Display global Points per Second (spy on Points) or Creations per Second (spy on Id Creation).
    *
    * @param factor Multiply by backend count to accurately display pps/cps.
    * @param rate   Used to get 1m, 5m, 15m intervals.
    */
   public abstract void setGlobalPPS(double factor, Meter rate);
+
+  /**
+   * Create CSV file for exporting data.
+   */
+  public abstract void setUpCSVWriter();
 
   public void setListener(Listener listener) {
     this.listener = listener;
@@ -181,7 +196,7 @@ public abstract class NamespacePanel extends Panel {
     this.table.setVisibleRows(count);
   }
 
-  public void renderNodes(Node root, double factor, Collection<Node> nodes) {
+  public void renderNodes(Node root, double factor, Collection<Node> nodes, boolean takeSnapshot) {
     synchronized (table) {
       @Nullable
       String selectedLabel = null;
@@ -195,9 +210,24 @@ public abstract class NamespacePanel extends Panel {
       }
       labelToNodeMap.clear();
       Snapshot snapshot = root.getLag().getSnapshot();
-      addFirstRow(root, factor, nodes, snapshot);
-      addNodes(root, factor, nodes, snapshot, selectedLabel);
+      addFirstRow(root, factor, nodes, snapshot, takeSnapshot);
+      addNodes(root, factor, nodes, snapshot, selectedLabel, takeSnapshot);
     }
+  }
+
+  public void setExportData(boolean exportData, String exportFile) {
+    if (exportData) {
+      footer.removeComponent(configBtn);
+      footer.removeComponent(stopStartBtn);
+      header.addComponent(stopwatchTime.withBorder(Borders.singleLine()).
+          setLayoutData(BorderLayout.Location.TOP));
+      this.exportFile = "./" + exportFile;
+      setUpCSVWriter();
+    }
+  }
+
+  public void setStopwatchTime(long time) {
+    this.stopwatchTime.setText("Time: " + time + " Seconds");
   }
 
   public void setSamplingRate(double rate) {
@@ -221,6 +251,14 @@ public abstract class NamespacePanel extends Panel {
     } else {
       this.path.setForegroundColor(TextColor.ANSI.BLACK);
     }
+  }
+
+  /**
+   * @param path  Displayed path for exporting data.
+   */
+  public void setRootPath(String path) {
+    String [] temp = path.split("\\s+");
+    this.rootPath = (temp.length > 1 ) ? temp[temp.length - 1] : "..";
   }
 
   public void setConnected() {
